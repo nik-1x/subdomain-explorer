@@ -12,11 +12,12 @@ import {
   Spinner,
   Text,
 } from '@telegram-apps/telegram-ui';
-import { discoverSubdomains, type DiscoveryResult } from '../lib/crtname';
+import { DiscoveryBlockedError, discoverSubdomains, type DiscoveryResult } from '../lib/crtname';
 import { isValidDomain, normalizeDomain } from '../lib/domain';
 import { useLazyPings } from '../lib/useLazyPings';
 import { bindBackButton, haptic, notify } from '../lib/telegram';
 import { SubdomainRow } from '../components/SubdomainRow';
+import { Handoff } from '../components/Handoff';
 import './ResultsPage.css';
 
 type Filter = 'all' | 'online' | 'offline';
@@ -29,12 +30,16 @@ export function ResultsPage() {
 
   const [data, setData] = useState<DiscoveryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Set when the direct fetch is blocked and the user has to run the query. */
+  const [blocked, setBlocked] = useState<string | null>(null);
+  /** Hosts pasted back from a user-run request.  */
+  const [pasted, setPasted] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<Filter>('all');
   const [visible, setVisible] = useState(PAGE_SIZE);
 
-  const hosts = useMemo(() => data?.hosts ?? [], [data]);
+  const hosts = useMemo(() => pasted ?? data?.hosts ?? [], [pasted, data]);
   const { results, observe, stats } = useLazyPings(hosts);
 
   useEffect(() => bindBackButton(() => navigate('/')), [navigate]);
@@ -48,6 +53,8 @@ export function ResultsPage() {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
+    setBlocked(null);
+    setPasted(null);
     setData(null);
     setVisible(PAGE_SIZE);
 
@@ -60,7 +67,10 @@ export function ResultsPage() {
       },
       (failure: unknown) => {
         if (controller.signal.aborted) return;
-        setError(failure instanceof Error ? failure.message : String(failure));
+        const message = failure instanceof Error ? failure.message : String(failure);
+        // A blocked request is not a dead end — the user can run it instead.
+        if (failure instanceof DiscoveryBlockedError) setBlocked(message);
+        else setError(message);
         setLoading(false);
         notify('error');
       },
@@ -93,7 +103,7 @@ export function ResultsPage() {
     return () => io.disconnect();
   }, [filtered.length, shown.length]);
 
-  if (loading) {
+  if (loading && !pasted) {
     return (
       <div className="results">
         <Header apex={apex} onBack={() => navigate('/')} subtitle="Searching crt.name…" />
@@ -110,7 +120,23 @@ export function ResultsPage() {
     );
   }
 
-  if (data && hosts.length === 0) {
+  if (blocked && !pasted) {
+    return (
+      <div className="results">
+        <Header apex={apex} onBack={() => navigate('/')} subtitle={blocked} />
+        <Handoff
+          apex={apex}
+          onHosts={(hosts) => {
+            setPasted(hosts);
+            setBlocked(null);
+          }}
+          onRetry={() => setAttempt((value) => value + 1)}
+        />
+      </div>
+    );
+  }
+
+  if (data && !pasted && hosts.length === 0) {
     return (
       <div className="results">
         <Header apex={apex} onBack={() => navigate('/')} subtitle="no records on crt.name" />
@@ -131,7 +157,7 @@ export function ResultsPage() {
     );
   }
 
-  if (error) {
+  if (error && !pasted) {
     return (
       <div className="results">
         <Header apex={apex} onBack={() => navigate('/')} />
@@ -162,7 +188,7 @@ export function ResultsPage() {
       <Header
         apex={apex}
         onBack={() => navigate('/')}
-        subtitle={`${hosts.length} names from crt.name`}
+        subtitle={`${hosts.length} names${pasted ? ' · pasted' : ''} from crt.name`}
       />
 
       <div className="results__toolbar">

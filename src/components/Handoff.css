@@ -1,0 +1,38 @@
+.handoff__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 18px;
+}
+
+.handoff__step {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.handoff__url {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 16px;
+  word-break: break-all;
+  color: var(--tgui--link_color, #2990ff);
+  background: var(--tgui--secondary_fill, rgba(127, 127, 127, 0.12));
+}
+
+.handoff__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.handoff__problem {
+  color: var(--tgui--destructive_text_color, #e53935);
+}
+
+.handoff__retry {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 24px;
+}

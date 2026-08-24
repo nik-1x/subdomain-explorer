@@ -26,16 +26,25 @@ error). Names are lowercased, wildcard prefixes (`*.`) stripped, out-of-scope
 and malformed entries dropped, then deduplicated and sorted apex-first by label
 depth.
 
-**CORS:** the request is a plain GET with no custom headers, so there is no
-preflight — but the endpoint must send `Access-Control-Allow-Origin` for a
-browser on another origin to read the response. In Caddy that is one line:
+crt.name is free, needs no token, and allows 1000 requests per IP per day.
 
-```
-header /v1/* Access-Control-Allow-Origin "*"
-```
+**CORS:** crt.name sends no `Access-Control-Allow-Origin` header — verified on
+the plain call, `?format=json` and `&dates=1` alike — so a page on another
+origin cannot read the response: the browser makes the request and then throws
+it away. This app carries no proxy, so rather than dead-ending, the request is
+handed to the user:
 
-The app calls crt.name directly and nothing else; there are no proxies in the
-request path.
+1. the app tries the direct fetch first — that succeeds the day crt.name adds
+   the header, or if you host the app on the same origin;
+2. when it is blocked, the results screen shows the exact API URL with an
+   **Open request** button. The user runs the query themselves — their browser,
+   their IP, their share of the free daily budget;
+3. they paste the response back. `parseHostList` accepts either the plain-text
+   body or a `?format=json` array, and everything downstream behaves exactly as
+   it would have after a direct fetch.
+
+One line on the crt.name side removes steps 2 and 3 entirely (in Caddy:
+`header /v1/* Access-Control-Allow-Origin "*"`).
 
 ### Pinging — DNS over HTTPS
 
@@ -84,14 +93,14 @@ OS, and the in-page back button replaces Telegram's native one.
 
 ```
 src/
-  lib/crtname.ts       crt.name lookup
+  lib/crtname.ts       crt.name lookup + response parsing
   lib/dns.ts           DoH resolution (3s deadline) + concurrency queue
   lib/domain.ts        input normalisation, validation, sorting
   lib/useLazyPings.ts  IntersectionObserver -> queued lookups
   lib/telegram.ts      WebApp bridge (no-op in a browser)
   pages/SearchPage.tsx centered search
   pages/ResultsPage.tsx results, filters, paging
-  components/          row + status pill
+  components/          row, status pill, user-run request handoff
 ```
 
 ## Notes and limits
