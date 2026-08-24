@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Telegram Mini App that discovers subdomains via Certificate Transparency logs (crt.sh) and resolves them lazily while you scroll.",
+  "description": "Telegram Mini App that discovers subdomains via crt.name and resolves them lazily while you scroll.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

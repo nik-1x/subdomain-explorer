@@ -12,7 +12,7 @@ import {
   Spinner,
   Text,
 } from '@telegram-apps/telegram-ui';
-import { discoverSubdomains, type DiscoveryResult } from '../lib/crtsh';
+import { discoverSubdomains, type DiscoveryResult } from '../lib/crtname';
 import { isValidDomain, normalizeDomain } from '../lib/domain';
 import { useLazyPings } from '../lib/useLazyPings';
 import { bindBackButton, haptic, notify } from '../lib/telegram';
@@ -96,7 +96,7 @@ export function ResultsPage() {
   if (loading) {
     return (
       <div className="results">
-        <Header apex={apex} onBack={() => navigate('/')} subtitle="Searching certificate logs…" />
+        <Header apex={apex} onBack={() => navigate('/')} subtitle="Searching crt.name…" />
         <List>
           <Section>
             {Array.from({ length: 6 }, (_, index) => (
@@ -110,12 +110,33 @@ export function ResultsPage() {
     );
   }
 
+  if (data && hosts.length === 0) {
+    return (
+      <div className="results">
+        <Header apex={apex} onBack={() => navigate('/')} subtitle={`no records · ${data.source}`} />
+        <Placeholder
+          header="No subdomains found"
+          description={`crt.name has no certificates on record for ${apex}.`}
+          action={
+            <Button size="m" onClick={() => navigate('/')}>
+              New search
+            </Button>
+          }
+        >
+          <div className="results__emoji" aria-hidden>
+            🕳️
+          </div>
+        </Placeholder>
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="results">
         <Header apex={apex} onBack={() => navigate('/')} />
         <Placeholder
-          header="Nothing came back"
+          header="crt.name did not answer"
           description={error}
           action={
             <div className="results__actions">
@@ -169,7 +190,7 @@ export function ResultsPage() {
         <Section
           footer={
             filter === 'all'
-              ? 'Hosts are resolved over DNS-over-HTTPS as they scroll into view. Tap a row to open it.'
+              ? 'Names come from crt.name. Each one is resolved over DNS-over-HTTPS as its row scrolls into view — tap a row to open it.'
               : 'Only hosts already resolved are counted here — keep scrolling the All tab to check more.'
           }
         >
@@ -204,7 +225,7 @@ export function ResultsPage() {
 
       {data?.notes.length ? (
         <div className="results__notes">
-          <Text className="results__notes-title">Source fallbacks</Text>
+          <Text className="results__notes-title">Transport fallbacks</Text>
           {data.notes.map((note) => (
             <Caption level="2" key={note} Component="p">
               {note}

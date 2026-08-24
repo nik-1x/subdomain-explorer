@@ -1,13 +1,12 @@
 # Subdomain Explorer
 
-A Telegram Mini App that pulls a domain's subdomains out of public **Certificate
-Transparency** logs and then checks, lazily as you scroll, which of them still
-resolve.
+A Telegram Mini App that looks up a domain's subdomains on **crt.name** and
+then checks, lazily as you scroll, which of them still resolve.
 
 * **Centered search screen** → type a domain, press Search.
-* **Results screen** → every unique name found in CT logs, newest sources first.
+* **Results screen** → every unique name crt.name knows about.
 * **Lazy pinging** → a host is only looked up when its row scrolls into view, so
-  a domain with 2 000 certificates still opens instantly.
+  an apex with 20 000 names still opens instantly.
 
 Built with React + Vite and the official [Telegram UI](https://github.com/Telegram-Mini-Apps/TelegramUI)
 component kit, so it inherits the user's Telegram theme (light/dark, iOS/base
@@ -15,28 +14,30 @@ platform styling) and works in a plain browser too.
 
 ## How it works
 
-### Discovery — crt.sh
+### Discovery — crt.name
 
-`GET https://crt.sh/?q=%25.<domain>&output=json&exclude=expired`
+```
+GET https://crt.name/v1/search?apex=<domain>
+```
 
-crt.sh is free and needs no key, but from a browser it has two problems: it
-sends no CORS headers, and it is frequently overloaded (502s, long stalls).
-So `src/lib/crtsh.ts` starts every transport **in parallel** and takes the first
-usable answer:
-
-| Priority | Transport |
-| --- | --- |
-| 0 | crt.sh directly |
-| 0 | crt.sh through `allorigins` / `corsproxy.io` / `codetabs` CORS relays |
-| 1 | [certspotter](https://sslmate.com/ct_search_api/) — another free CT search, CORS-enabled |
-
-A priority‑1 answer waits 3 s for crt.sh before it is accepted, so crt.sh stays
-the primary source whenever it is healthy. The results screen shows which source
-actually answered, plus a note for every source that did not.
-
-Names are lowercased, wildcard prefixes (`*.`) stripped, out-of-scope and
-malformed entries dropped, then deduplicated and sorted apex-first by label
+The response is plain text, one hostname per line; an empty body means the apex
+has no records (the app shows a "no subdomains found" state rather than an
+error). Names are lowercased, wildcard prefixes (`*.`) stripped, out-of-scope
+and malformed entries dropped, then deduplicated and sorted apex-first by label
 depth.
+
+**CORS:** the endpoint does not currently send `Access-Control-Allow-Origin`, so
+a browser on another origin cannot read the response. `src/lib/crtname.ts`
+therefore tries the direct call first and falls back to public CORS relays
+(`allorigins`, `corsproxy.io`, `codetabs`), showing which transport answered.
+Adding one header on the crt.name side removes the need for the relays entirely
+— in Caddy:
+
+```
+header /v1/* Access-Control-Allow-Origin "*"
+```
+
+Once that is live, the relay list in `crtname.ts` can be deleted.
 
 ### Pinging — DNS over HTTPS
 
@@ -71,7 +72,8 @@ npm run build    # typecheck + production build into dist/
 npm run preview
 ```
 
-Deploy `dist/` to any static host (`base: './'` makes sub-path hosting work),
+The compiled app is published to the **`build`** branch of this repository —
+serve that branch as a static site (`base: './'` makes sub-path hosting work),
 then point a Telegram bot's Mini App URL at it via **@BotFather → Bot Settings →
 Menu Button**. Outside Telegram the app degrades gracefully: theme follows the
 OS, and the in-page back button replaces Telegram's native one.
@@ -80,7 +82,7 @@ OS, and the in-page back button replaces Telegram's native one.
 
 ```
 src/
-  lib/crtsh.ts         CT log discovery + fallbacks
+  lib/crtname.ts       crt.name lookup + CORS fallbacks
   lib/dns.ts           DoH resolution + concurrency queue
   lib/domain.ts        input normalisation, validation, sorting
   lib/useLazyPings.ts  IntersectionObserver -> queued lookups
@@ -92,7 +94,8 @@ src/
 
 ## Notes and limits
 
-* CT logs only show names that appear in issued certificates — internal hosts
-  without a public certificate will not be here, and long-dead names can linger.
-* Public CORS relays are best-effort third parties; if you self-host, proxying
-  crt.sh from your own backend is more reliable than any of them.
+* Certificate data only shows names that appear in issued certificates —
+  internal hosts without a public certificate will not be here, and long-dead
+  names can linger, which is what the live/dead check is for.
+* crt.name returns an `X-RateLimit-Limit: 1000` header; one search is one
+  request, so the app never fans out across that endpoint.

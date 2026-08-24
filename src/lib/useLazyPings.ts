@@ -7,6 +7,9 @@ import { PingQueue, pingHost, type PingResult } from './dns';
  */
 export function useLazyPings(hosts: string[]) {
   const [results, setResults] = useState<Record<string, PingResult>>({});
+  // Counted as results land rather than by scanning `hosts`: an apex can carry
+  // tens of thousands of names and this updates on every completed lookup.
+  const [stats, setStats] = useState({ alive: 0, dead: 0, checked: 0 });
   const queue = useMemo(() => new PingQueue(6), []);
   const requested = useRef(new Set<string>());
   const abort = useRef<AbortController>();
@@ -20,6 +23,7 @@ export function useLazyPings(hosts: string[]) {
     abort.current = controller;
     requested.current = new Set();
     setResults({});
+    setStats({ alive: 0, dead: 0, checked: 0 });
     return () => controller.abort();
   }, [hosts]);
 
@@ -35,6 +39,13 @@ export function useLazyPings(hosts: string[]) {
           (result) => {
             if (controller?.signal.aborted) return;
             setResults((prev) => ({ ...prev, [host]: result }));
+            if (result.state === 'alive' || result.state === 'dead') {
+              setStats((prev) => ({
+                alive: prev.alive + (result.state === 'alive' ? 1 : 0),
+                dead: prev.dead + (result.state === 'dead' ? 1 : 0),
+                checked: prev.checked + 1,
+              }));
+            }
           },
           (error: unknown) => {
             if (controller?.signal.aborted) return;
@@ -94,18 +105,6 @@ export function useLazyPings(hosts: string[]) {
     },
     [ping],
   );
-
-  const stats = useMemo(() => {
-    let alive = 0;
-    let dead = 0;
-    let checked = 0;
-    for (const host of hosts) {
-      const state = results[host]?.state;
-      if (state === 'alive') { alive += 1; checked += 1; }
-      else if (state === 'dead') { dead += 1; checked += 1; }
-    }
-    return { alive, dead, checked };
-  }, [hosts, results]);
 
   return { results, observe, retry, stats };
 }
