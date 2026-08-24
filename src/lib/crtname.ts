@@ -82,16 +82,16 @@ export async function discoverSubdomains(apex: string, signal?: AbortSignal): Pr
     const response = await fetch(searchUrl(apex), { signal: controller.signal });
     const body = await response.text();
     if (!response.ok) {
-      throw new DiscoveryError(body.trim().slice(0, 140) || `crt.name returned HTTP ${response.status}`);
+      throw new DiscoveryError(body.trim().slice(0, 140) || `The index returned HTTP ${response.status}`);
     }
     return { apex, hosts: parseHostList(body, apex) };
   } catch (error) {
     if (error instanceof DiscoveryError) throw error;
     if (signal?.aborted) throw new DiscoveryError('Search cancelled');
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new DiscoveryBlockedError('crt.name took too long to answer.');
+      throw new DiscoveryBlockedError('The index took too long to answer.');
     }
-    throw new DiscoveryBlockedError('This page cannot read crt.name directly.');
+    throw new DiscoveryBlockedError('This page cannot fetch the list directly.');
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', onAbort);

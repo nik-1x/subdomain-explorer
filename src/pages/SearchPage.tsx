@@ -39,8 +39,8 @@ export function SearchPage() {
           Subdomain Explorer
         </LargeTitle>
         <Text className="search-page__lead">
-          Every certificate a domain issues is public. Type a domain to pull its subdomains from
-          crt.name — then scroll to see which ones still resolve.
+          Every certificate a domain issues is public. Type a domain to pull its subdomains out of
+          the certificate index — then scroll to see which ones still resolve.
         </Text>
 
         <Input
@@ -85,7 +85,7 @@ export function SearchPage() {
       </form>
 
       <Caption level="2" className="search-page__footer">
-        Names from crt.name · resolution over DNS-over-HTTPS
+        Certificate data · resolution over DNS-over-HTTPS
       </Caption>
     </div>
   );

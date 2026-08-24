@@ -106,7 +106,7 @@ export function ResultsPage() {
   if (loading && !pasted) {
     return (
       <div className="results">
-        <Header apex={apex} onBack={() => navigate('/')} subtitle="Searching crt.name…" />
+        <Header apex={apex} onBack={() => navigate('/')} subtitle="Searching the index…" />
         <List>
           <Section>
             {Array.from({ length: 6 }, (_, index) => (
@@ -139,10 +139,10 @@ export function ResultsPage() {
   if (data && !pasted && hosts.length === 0) {
     return (
       <div className="results">
-        <Header apex={apex} onBack={() => navigate('/')} subtitle="no records on crt.name" />
+        <Header apex={apex} onBack={() => navigate('/')} subtitle="no records" />
         <Placeholder
           header="No subdomains found"
-          description={`crt.name has no certificates on record for ${apex}.`}
+          description={`No certificates are on record for ${apex}.`}
           action={
             <Button size="m" onClick={() => navigate('/')}>
               New search
@@ -162,7 +162,7 @@ export function ResultsPage() {
       <div className="results">
         <Header apex={apex} onBack={() => navigate('/')} />
         <Placeholder
-          header="crt.name did not answer"
+          header="Nothing came back"
           description={error}
           action={
             <div className="results__actions">
@@ -188,7 +188,7 @@ export function ResultsPage() {
       <Header
         apex={apex}
         onBack={() => navigate('/')}
-        subtitle={`${hosts.length} names${pasted ? ' · pasted' : ''} from crt.name`}
+        subtitle={`${hosts.length} names${pasted ? ' · pasted' : ''}`}
       />
 
       <div className="results__toolbar">

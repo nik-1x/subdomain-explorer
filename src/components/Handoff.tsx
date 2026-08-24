@@ -11,10 +11,13 @@ interface Props {
 }
 
 /**
- * crt.name sends no CORS header, so this page cannot read its response. Instead
- * of dead-ending, the request is handed to the user: they run it themselves —
- * their browser, their IP, their share of the free 1000/day — and paste what
- * comes back. Everything downstream behaves exactly as a direct fetch.
+ * The index sends no CORS header, so this page cannot read its response.
+ * Instead of dead-ending, the request is handed to the user: they run it
+ * themselves — their browser, their IP, their share of the free daily budget —
+ * and paste what comes back. Everything downstream behaves as a direct fetch.
+ *
+ * The upstream service is deliberately not named in the UI; the URL only
+ * appears in the link the buttons open or copy.
  */
 export function Handoff({ apex, onHosts, onRetry }: Props) {
   const url = searchUrl(apex);
@@ -50,12 +53,11 @@ export function Handoff({ apex, onHosts, onRetry }: Props) {
   return (
     <div className="handoff">
       <Section
-        header="crt.name has to be opened by you"
-        footer="crt.name does not allow web pages to read its responses, so the app cannot fetch this for you. Opening the link runs the query from your own browser."
+        header="Run the request yourself"
+        footer="The index does not let web pages read its responses, so the app cannot fetch this for you. Opening the request runs the query from your own browser instead."
       >
         <div className="handoff__body">
           <Text className="handoff__step">1 · Open the request and copy everything it returns.</Text>
-          <code className="handoff__url">{url}</code>
           <div className="handoff__actions">
             <Button
               size="m"
