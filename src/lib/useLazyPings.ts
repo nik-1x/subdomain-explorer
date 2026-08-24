@@ -9,7 +9,7 @@ export function useLazyPings(hosts: string[]) {
   const [results, setResults] = useState<Record<string, PingResult>>({});
   // Counted as results land rather than by scanning `hosts`: an apex can carry
   // tens of thousands of names and this updates on every completed lookup.
-  const [stats, setStats] = useState({ alive: 0, dead: 0, checked: 0 });
+  const [stats, setStats] = useState({ online: 0, offline: 0, checked: 0 });
   const queue = useMemo(() => new PingQueue(6), []);
   const requested = useRef(new Set<string>());
   const abort = useRef<AbortController>();
@@ -23,7 +23,7 @@ export function useLazyPings(hosts: string[]) {
     abort.current = controller;
     requested.current = new Set();
     setResults({});
-    setStats({ alive: 0, dead: 0, checked: 0 });
+    setStats({ online: 0, offline: 0, checked: 0 });
     return () => controller.abort();
   }, [hosts]);
 
@@ -39,21 +39,14 @@ export function useLazyPings(hosts: string[]) {
           (result) => {
             if (controller?.signal.aborted) return;
             setResults((prev) => ({ ...prev, [host]: result }));
-            if (result.state === 'alive' || result.state === 'dead') {
-              setStats((prev) => ({
-                alive: prev.alive + (result.state === 'alive' ? 1 : 0),
-                dead: prev.dead + (result.state === 'dead' ? 1 : 0),
-                checked: prev.checked + 1,
-              }));
-            }
-          },
-          (error: unknown) => {
-            if (controller?.signal.aborted) return;
-            requested.current.delete(host);
-            setResults((prev) => ({
-              ...prev,
-              [host]: { state: 'error', detail: error instanceof Error ? error.message : 'failed' },
+            setStats((prev) => ({
+              online: prev.online + (result.state === 'online' ? 1 : 0),
+              offline: prev.offline + (result.state === 'online' ? 0 : 1),
+              checked: prev.checked + 1,
             }));
+          },
+          () => {
+            // pingHost only rejects when the search was replaced mid-flight.
           },
         );
     },
@@ -98,13 +91,5 @@ export function useLazyPings(hosts: string[]) {
     observer.current?.observe(element);
   }, []);
 
-  const retry = useCallback(
-    (host: string) => {
-      requested.current.delete(host);
-      ping(host);
-    },
-    [ping],
-  );
-
-  return { results, observe, retry, stats };
+  return { results, observe, stats };
 }

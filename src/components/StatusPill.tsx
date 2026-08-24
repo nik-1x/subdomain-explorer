@@ -5,13 +5,12 @@ import './StatusPill.css';
 const LABELS: Record<PingResult['state'], string> = {
   idle: 'queued',
   checking: 'checking',
-  alive: 'live',
-  dead: 'dead',
-  error: 'retry',
+  online: 'online',
+  offline: 'offline',
 };
 
 /** Compact right-hand status for a subdomain row. */
-export function StatusPill({ result, onRetry }: { result: PingResult; onRetry: () => void }) {
+export function StatusPill({ result }: { result: PingResult }) {
   if (result.state === 'checking') {
     return (
       <span className="status-pill status-pill--checking">
@@ -20,20 +19,13 @@ export function StatusPill({ result, onRetry }: { result: PingResult; onRetry: (
     );
   }
 
-  const interactive = result.state === 'error';
   return (
-    <button
-      type="button"
-      className={`status-pill status-pill--${result.state}`}
-      onClick={interactive ? onRetry : undefined}
-      disabled={!interactive}
-      title={result.detail ?? result.address ?? result.cname ?? ''}
-    >
+    <span className={`status-pill status-pill--${result.state}`}>
       <span className="status-pill__dot" />
       {LABELS[result.state]}
-      {result.ms !== undefined && result.state === 'alive' ? (
+      {result.state === 'online' && result.ms !== undefined ? (
         <span className="status-pill__ms">{result.ms}ms</span>
       ) : null}
-    </button>
+    </span>
   );
 }

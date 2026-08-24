@@ -26,31 +26,33 @@ error). Names are lowercased, wildcard prefixes (`*.`) stripped, out-of-scope
 and malformed entries dropped, then deduplicated and sorted apex-first by label
 depth.
 
-**CORS:** the endpoint does not currently send `Access-Control-Allow-Origin`, so
-a browser on another origin cannot read the response. `src/lib/crtname.ts`
-therefore tries the direct call first and falls back to public CORS relays
-(`allorigins`, `corsproxy.io`, `codetabs`), showing which transport answered.
-Adding one header on the crt.name side removes the need for the relays entirely
-— in Caddy:
+**CORS:** the request is a plain GET with no custom headers, so there is no
+preflight — but the endpoint must send `Access-Control-Allow-Origin` for a
+browser on another origin to read the response. In Caddy that is one line:
 
 ```
 header /v1/* Access-Control-Allow-Origin "*"
 ```
 
-Once that is live, the relay list in `crtname.ts` can be deleted.
+The app calls crt.name directly and nothing else; there are no proxies in the
+request path.
 
 ### Pinging — DNS over HTTPS
 
-A web page cannot send ICMP, so "alive" here means *public DNS still resolves
-it*. Each host is queried against Cloudflare's DoH endpoint (Google's as
-backup):
+A web page cannot send ICMP, so "online" here means *public DNS still resolves
+it*. Cloudflare and Google are queried at the same time under one **3-second
+deadline**:
 
 `GET https://cloudflare-dns.com/dns-query?name=<host>&type=A` with
 `accept: application/dns-json`
 
-* **live** — A/AAAA records (first address and count are shown), or a CNAME target
-* **dead** — `NXDOMAIN`, or no address record
-* **retry** — both resolvers failed; tap the pill to try again
+* **online** — the first resolver to return an A/AAAA record wins (the address,
+  the count of extras, or a CNAME target is shown alongside the round trip)
+* **offline** — everything else: `NXDOMAIN`, no address record, a resolver
+  error, or nothing back within 3 s
+
+A negative answer from one resolver does not settle the host — it waits for the
+other, and only falls to offline when both have spoken or the deadline passes.
 
 ### Lazy, on-scroll checking
 
@@ -82,8 +84,8 @@ OS, and the in-page back button replaces Telegram's native one.
 
 ```
 src/
-  lib/crtname.ts       crt.name lookup + CORS fallbacks
-  lib/dns.ts           DoH resolution + concurrency queue
+  lib/crtname.ts       crt.name lookup
+  lib/dns.ts           DoH resolution (3s deadline) + concurrency queue
   lib/domain.ts        input normalisation, validation, sorting
   lib/useLazyPings.ts  IntersectionObserver -> queued lookups
   lib/telegram.ts      WebApp bridge (no-op in a browser)
@@ -96,6 +98,6 @@ src/
 
 * Certificate data only shows names that appear in issued certificates —
   internal hosts without a public certificate will not be here, and long-dead
-  names can linger, which is what the live/dead check is for.
+  names can linger, which is what the online/offline check is for.
 * crt.name returns an `X-RateLimit-Limit: 1000` header; one search is one
   request, so the app never fans out across that endpoint.

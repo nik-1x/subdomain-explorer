@@ -19,7 +19,7 @@ import { bindBackButton, haptic, notify } from '../lib/telegram';
 import { SubdomainRow } from '../components/SubdomainRow';
 import './ResultsPage.css';
 
-type Filter = 'all' | 'alive' | 'dead';
+type Filter = 'all' | 'online' | 'offline';
 const PAGE_SIZE = 40;
 
 export function ResultsPage() {
@@ -35,7 +35,7 @@ export function ResultsPage() {
   const [visible, setVisible] = useState(PAGE_SIZE);
 
   const hosts = useMemo(() => data?.hosts ?? [], [data]);
-  const { results, observe, retry, stats } = useLazyPings(hosts);
+  const { results, observe, stats } = useLazyPings(hosts);
 
   useEffect(() => bindBackButton(() => navigate('/')), [navigate]);
 
@@ -113,7 +113,7 @@ export function ResultsPage() {
   if (data && hosts.length === 0) {
     return (
       <div className="results">
-        <Header apex={apex} onBack={() => navigate('/')} subtitle={`no records · ${data.source}`} />
+        <Header apex={apex} onBack={() => navigate('/')} subtitle="no records on crt.name" />
         <Placeholder
           header="No subdomains found"
           description={`crt.name has no certificates on record for ${apex}.`}
@@ -162,12 +162,12 @@ export function ResultsPage() {
       <Header
         apex={apex}
         onBack={() => navigate('/')}
-        subtitle={`${hosts.length} unique names · ${data?.source ?? ''}`}
+        subtitle={`${hosts.length} names from crt.name`}
       />
 
       <div className="results__toolbar">
         <SegmentedControl>
-          {(['all', 'alive', 'dead'] as Filter[]).map((value) => (
+          {(['all', 'online', 'offline'] as Filter[]).map((value) => (
             <SegmentedControl.Item
               key={value}
               selected={filter === value}
@@ -177,7 +177,11 @@ export function ResultsPage() {
                 setVisible(PAGE_SIZE);
               }}
             >
-              {value === 'all' ? `All ${hosts.length}` : value === 'alive' ? `Live ${stats.alive}` : `Dead ${stats.dead}`}
+              {value === 'all'
+                ? `All ${hosts.length}`
+                : value === 'online'
+                  ? `Online ${stats.online}`
+                  : `Offline ${stats.offline}`}
             </SegmentedControl.Item>
           ))}
         </SegmentedControl>
@@ -190,8 +194,8 @@ export function ResultsPage() {
         <Section
           footer={
             filter === 'all'
-              ? 'Names come from crt.name. Each one is resolved over DNS-over-HTTPS as its row scrolls into view — tap a row to open it.'
-              : 'Only hosts already resolved are counted here — keep scrolling the All tab to check more.'
+              ? 'Each name is resolved over DNS-over-HTTPS as its row scrolls into view; no answer within 3s counts as offline. Tap a row to open it.'
+              : 'Only names already checked appear here — keep scrolling the All tab to check more.'
           }
         >
           {shown.length === 0 ? (
@@ -205,7 +209,6 @@ export function ResultsPage() {
                 host={host}
                 result={results[host] ?? { state: 'idle' }}
                 observeRef={observe(host)}
-                onRetry={() => retry(host)}
               />
             ))
           )}
@@ -223,16 +226,6 @@ export function ResultsPage() {
         </div>
       )}
 
-      {data?.notes.length ? (
-        <div className="results__notes">
-          <Text className="results__notes-title">Transport fallbacks</Text>
-          {data.notes.map((note) => (
-            <Caption level="2" key={note} Component="p">
-              {note}
-            </Caption>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

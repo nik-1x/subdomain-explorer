@@ -1,32 +1,29 @@
 /**
  * "Ping" for a browser: ICMP is not reachable from a web page, so a host counts
- * as alive when public DNS still resolves it. Cloudflare's DNS-over-HTTPS
- * endpoint is free, fast and CORS-enabled; Google's is the backup.
+ * as online when public DNS still resolves it within the deadline below.
+ * Anything else — no record, a resolver error, or silence past the deadline —
+ * is simply offline.
  */
 
-export type PingState = 'idle' | 'checking' | 'alive' | 'dead' | 'error';
+export type PingState = 'idle' | 'checking' | 'online' | 'offline';
 
 export interface PingResult {
   state: PingState;
-  /** First A/AAAA address, when there is one. */
+  /** First A/AAAA address, when the host is online. */
   address?: string;
   /** CNAME target for hosts that only alias somewhere else. */
   cname?: string;
-  /** Number of addresses found, for the "+2 more" hint. */
+  /** Number of addresses found, for the "+2" hint. */
   addressCount?: number;
   ms?: number;
-  detail?: string;
 }
 
-const RESOLVERS = [
-  'https://cloudflare-dns.com/dns-query',
-  'https://dns.google/resolve',
-];
+/** A host that has not answered within this many ms is reported as offline. */
+export const PING_TIMEOUT_MS = 3_000;
 
-const TIMEOUT_MS = 8_000;
+const RESOLVERS = ['https://cloudflare-dns.com/dns-query', 'https://dns.google/resolve'];
 
 interface DohAnswer {
-  name: string;
   type: number;
   data: string;
 }
@@ -36,54 +33,68 @@ interface DohResponse {
   Answer?: DohAnswer[];
 }
 
-async function query(resolver: string, host: string, signal?: AbortSignal): Promise<DohResponse> {
+function read(data: DohResponse, ms: number): PingResult {
+  const answers = data.Answer ?? [];
+  const addresses = answers.filter((a) => a.type === 1 || a.type === 28).map((a) => a.data);
+  const cname = answers.find((a) => a.type === 5)?.data.replace(/\.$/, '');
+
+  if (addresses.length > 0) {
+    return { state: 'online', address: addresses[0], addressCount: addresses.length, cname, ms };
+  }
+  if (cname) return { state: 'online', cname, ms };
+  return { state: 'offline', ms };
+}
+
+/**
+ * Resolves `host`, or reports it offline. Both resolvers are queried at once
+ * under one shared deadline, so a slow or broken resolver cannot hold a row in
+ * the checking state for longer than `PING_TIMEOUT_MS`.
+ */
+export async function pingHost(host: string, signal?: AbortSignal): Promise<PingResult> {
+  const started = performance.now();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const deadline = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
   const onAbort = () => controller.abort();
   signal?.addEventListener('abort', onAbort);
-  try {
-    const response = await fetch(
-      `${resolver}?name=${encodeURIComponent(host)}&type=A`,
-      { signal: controller.signal, headers: { accept: 'application/dns-json' } },
-    );
+
+  const elapsed = () => Math.round(performance.now() - started);
+
+  const lookup = async (resolver: string): Promise<PingResult> => {
+    const response = await fetch(`${resolver}?name=${encodeURIComponent(host)}&type=A`, {
+      signal: controller.signal,
+      headers: { accept: 'application/dns-json' },
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return (await response.json()) as DohResponse;
+    return read((await response.json()) as DohResponse, elapsed());
+  };
+
+  try {
+    // First `online` answer wins; a negative or failed answer waits for the
+    // other resolver rather than settling the host on its own.
+    return await new Promise<PingResult>((resolve) => {
+      let outstanding = RESOLVERS.length;
+      const settleOffline = () => {
+        outstanding -= 1;
+        if (outstanding === 0) resolve({ state: 'offline', ms: elapsed() });
+      };
+      controller.signal.addEventListener('abort', () => resolve({ state: 'offline', ms: elapsed() }), {
+        once: true,
+      });
+      for (const resolver of RESOLVERS) {
+        lookup(resolver).then((result) => {
+          if (result.state === 'online') resolve(result);
+          else settleOffline();
+        }, settleOffline);
+      }
+    });
   } finally {
-    clearTimeout(timer);
+    clearTimeout(deadline);
+    controller.abort();
     signal?.removeEventListener('abort', onAbort);
   }
 }
 
-export async function pingHost(host: string, signal?: AbortSignal): Promise<PingResult> {
-  const started = performance.now();
-  let lastError = 'lookup failed';
-
-  for (const resolver of RESOLVERS) {
-    try {
-      const data = await query(resolver, host, signal);
-      const ms = Math.round(performance.now() - started);
-      const answers = data.Answer ?? [];
-      const addresses = answers.filter((a) => a.type === 1 || a.type === 28).map((a) => a.data);
-      const cname = answers.find((a) => a.type === 5)?.data.replace(/\.$/, '');
-
-      if (addresses.length > 0) {
-        return { state: 'alive', address: addresses[0], addressCount: addresses.length, cname, ms };
-      }
-      // NXDOMAIN (3) is a hard "gone"; anything else with no address is a name
-      // that exists but points nowhere useful right now.
-      if (data.Status === 3) return { state: 'dead', ms, detail: 'NXDOMAIN' };
-      if (cname) return { state: 'alive', cname, ms, detail: 'CNAME only' };
-      return { state: 'dead', ms, detail: data.Status === 0 ? 'no A record' : `status ${data.Status}` };
-    } catch (error) {
-      if (signal?.aborted) throw error;
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-  }
-
-  return { state: 'error', detail: lastError, ms: Math.round(performance.now() - started) };
-}
-
-/** Small FIFO queue so a fast scroll cannot fire 400 DoH requests at once. */
+/** Small FIFO queue so a fast scroll cannot fire hundreds of lookups at once. */
 export class PingQueue {
   private readonly pending: Array<() => void> = [];
   private active = 0;

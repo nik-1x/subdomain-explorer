@@ -3,7 +3,6 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border: none;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
@@ -30,20 +29,14 @@
   padding: 4px;
 }
 
-.status-pill--alive {
+.status-pill--online {
   background: rgba(48, 176, 96, 0.16);
   color: #2f9e5f;
 }
 
-.status-pill--dead {
+.status-pill--offline {
   background: rgba(230, 70, 70, 0.14);
   color: #d3524f;
-}
-
-.status-pill--error {
-  background: rgba(240, 170, 40, 0.18);
-  color: #c2851a;
-  cursor: pointer;
 }
 
 .status-pill--idle {
